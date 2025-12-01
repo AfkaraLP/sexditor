@@ -2,12 +2,15 @@ pub mod cursor_actions;
 pub mod text_actions;
 pub mod text_colour;
 
+use color_eyre::owo_colors::OwoColorize;
+use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::StatefulWidget;
 use ratatui::widgets::Widget;
 use std::fs::read_to_string;
+use std::io::Write;
 
 use crate::editor::cursor_actions::CursorAction;
 use crate::editor::text_actions::TextAction;
@@ -20,7 +23,6 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use fancy_regex::Regex;
 use ratatui::{
     DefaultTerminal, Frame,
-    layout::Rect,
     symbols::border,
     widgets::{Block, BorderType, Paragraph},
 };
@@ -45,6 +47,7 @@ pub struct Editor {
     pub frame_area: Rect,
     pub scroll: Position,
     pub theme_path: String,
+    pub message_queue: LogMessage,
 }
 #[derive(Default, Debug, Eq, PartialEq, Clone, Copy)]
 pub enum EditorMode {
@@ -78,6 +81,7 @@ impl Editor {
 
     pub fn draw(&self, frame: &mut Frame) {
         frame.set_cursor_position((self.cursor.x + 1, self.cursor.y + 1));
+
         frame.render_stateful_widget(self, frame.area(), &mut State);
     }
 
@@ -116,6 +120,13 @@ impl Editor {
         }
     }
 
+    pub fn save_file(&self) {
+        let mut file =
+            std::fs::File::create(self.file_path.as_str()).expect("directory does not exist");
+        file.write_all(self.file_text.as_bytes())
+            .expect("failed to write to file");
+    }
+
     pub fn exit(&mut self) {
         self.exit = true;
     }
@@ -132,6 +143,7 @@ impl Editor {
                     'j' => self.move_cursor(CursorDirection::Down),
                     'h' => self.move_cursor(CursorDirection::Left),
                     'l' => self.move_cursor(CursorDirection::Right),
+                    'd' => self.remove_char(&self.cursor.clone()),
                     'o' => {
                         self.insert_char(
                             &Position {
@@ -141,6 +153,16 @@ impl Editor {
                             '\n',
                         );
                         self.move_cursor(CursorDirection::Down);
+                        self.mode = EditorMode::Insert;
+                    }
+                    'O' => {
+                        self.insert_char(
+                            &Position {
+                                x: self.line_from_cursor(-1).len() as u16 + 1,
+                                y: self.cursor.y - 1,
+                            },
+                            '\n',
+                        );
                         self.mode = EditorMode::Insert;
                     }
                     'A' => {
@@ -201,6 +223,12 @@ impl Editor {
     pub fn execute_command(&mut self) {
         match self.command.clone().trim() {
             "q" => self.exit(),
+            "w" => self.save_file(),
+            "x" => {
+                self.save_file();
+                self.exit();
+            }
+            "e" => self.log(LogMessage::Error("aaaa".into())),
             path if path.starts_with("theme ") => {
                 self.set_theme(Some(&path["theme ".len()..]));
             }
@@ -217,6 +245,39 @@ impl Editor {
         let full_path = ["theme", &path].join("/");
         let full_path = [full_path, "toml".into()].join(".");
         self.theme_path = full_path;
+    }
+    pub fn log(&mut self, msg: LogMessage) {
+        self.message_queue = msg;
+    }
+}
+
+#[derive(Debug)]
+pub enum LogMessage {
+    Error(String),
+    Warn(String),
+    Info(String),
+}
+
+impl Default for LogMessage {
+    fn default() -> Self {
+        LogMessage::Info("".into())
+    }
+}
+
+impl LogMessage {
+    pub fn to_paragraph<'a>(&'a self) -> Paragraph<'a> {
+        match self {
+            LogMessage::Error(msg) => {
+                Paragraph::new(msg.as_str()).style(Style::new().fg(Color::Red))
+            }
+
+            LogMessage::Warn(msg) => {
+                Paragraph::new(msg.as_str()).style(Style::new().fg(Color::Yellow))
+            }
+            LogMessage::Info(msg) => {
+                Paragraph::new(msg.as_str()).style(Style::new().fg(Color::White))
+            }
+        }
     }
 }
 
@@ -261,6 +322,16 @@ impl StatefulWidget for &Editor {
         } else {
             0
         };
+
+        self.message_queue.to_paragraph().render(
+            Rect {
+                x: self.cursor.x,
+                y: self.cursor.y + 2,
+                width: 20,
+                height: 20,
+            },
+            buf,
+        );
 
         Paragraph::new(text)
             .left_aligned()

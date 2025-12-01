@@ -1,0 +1,8 @@
+keyword    = '''^(?u)(\bhe\b|\bshe\b|\bit\b|\bme\b|\bmy\b|\bhis\b|\bher\b|\bthey\b|\btheir\b|\btheirs\b)'''
+identifier = '''^(?u)(\bthe\b|\ba\b|\ban\b|\bthose\b|\bthat\b|\bthese\b)'''
+delimiters = '''^(,|\.|;|\(|\)\[|\]|\!|\?|\"|\')'''
+literal    = '''^[A-Z][a-zA-Z]*'''
+types      = '''^\w+ful'''
+extra      = '''^(penis)'''
+function   = '''^(?u)\w+ing'''
+comment    = '''^\(.*\)'''

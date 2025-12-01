@@ -12,6 +12,11 @@ impl TextAction for Editor {
     }
 
     fn remove_char(&mut self, pos: &Position) {
+        let byte_offset = self.get_byte_offset(pos);
+        if byte_offset >= self.file_text.len() {
+            self.file_text.pop();
+            return;
+        }
         self.file_text.remove(self.get_byte_offset(pos));
     }
 
@@ -24,7 +29,7 @@ impl TextAction for Editor {
                     .char_indices()
                     .nth(x)
                     .map(|(byte_idx, _)| byte_idx)
-                    .unwrap_or_else(|| line.len());
+                    .unwrap_or(line.len());
                 break;
             } else {
                 offset += line.len() + 1;
