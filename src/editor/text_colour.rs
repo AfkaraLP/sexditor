@@ -13,14 +13,14 @@ use crate::theme::ColourTheme;
 
 pub static RUST_SYNTAX: LazyLock<SyntaxRegex> = LazyLock::new(|| {
     SyntaxRegex::new(
-        r#"^(fn|cfg|super|let|mut|mod|pub|const|impl|static|for|use|while|match|if|else|break|continue|struct|enum|self)\b"#,
-        r#"^[A-Za-z_][A-Za-z0-9_]*"#,
-        r#"^(\(|\)|\||\{|\}|\[|\]|;|:|,|<|>|\?|\#)"#,
+        r"^(fn|cfg|super|let|mut|mod|pub|const|impl|static|for|use|while|match|if|else|break|continue|struct|enum|self)\b",
+        r"^[A-Za-z_][A-Za-z0-9_]*",
+        r"^(\(|\)|\||\{|\}|\[|\]|;|:|,|<|>|\?|\#)",
         r#"^(r\#\".*\"\#|\".*\"|[0-9]+)"#,
-        r#"^([A-Z][A-Za-z0-9_]*|str)"#,
-        r#"^(==|!=|<=|>=|=|\+|-|\*|/|\.\.|=>)"#,
-        r#"^([a-z][a-z_0-9]*)(?=\()"#,
-        r#"^(\/\/.*|/\*([\s\S]*?)\*/)"#,
+        r"^([A-Z][A-Za-z0-9_]*|str)",
+        r"^(==|!=|<=|>=|=|\+|-|\*|/|\.\.|=>)",
+        r"^([a-z][a-z_0-9]*)(?=\()",
+        r"^(\/\/.*|/\*([\s\S]*?)\*/)",
     )
     .unwrap()
 });
@@ -89,11 +89,13 @@ pub fn colour_text<'a>(text: &'a str, theme: &ColourTheme, syntax: &SyntaxRegex)
                     Span::raw(*val).style(match kind {
                         SyntaxKind::Keyword => Style::new().fg(theme.keyword.into()),
                         SyntaxKind::Identifier => Style::new().fg(theme.ident.into()),
-                        SyntaxKind::Delimiter => Style::new().fg(theme.delim.into()),
+                        SyntaxKind::Delimiter | SyntaxKind::Whitespace => {
+                            Style::new().fg(theme.delim.into())
+                        }
                         SyntaxKind::Type => Style::new().fg(theme.types.into()),
-                        SyntaxKind::Extra => Style::new().fg(theme.extra.into()),
-                        SyntaxKind::Whitespace => Style::new().fg(theme.delim.into()),
-                        SyntaxKind::Unknown => Style::new().fg(theme.extra.into()),
+                        SyntaxKind::Extra | SyntaxKind::Unknown => {
+                            Style::new().fg(theme.extra.into())
+                        }
                         SyntaxKind::Literal => Style::new().fg(theme.lit.into()),
                         SyntaxKind::Function => Style::new().fg(theme.function.into()),
                         SyntaxKind::Comment => Style::new().fg(theme.comment.into()),

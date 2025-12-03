@@ -2,16 +2,17 @@ pub mod cursor_actions;
 pub mod text_actions;
 pub mod text_colour;
 
-use color_eyre::owo_colors::OwoColorize;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
+use ratatui::symbols::border;
 use ratatui::text::Line;
 use ratatui::widgets::StatefulWidget;
 use ratatui::widgets::Widget;
 use std::fs::read_to_string;
 use std::io::Write;
 
+use crate::editor;
 use crate::editor::cursor_actions::CursorAction;
 use crate::editor::text_actions::TextAction;
 
@@ -23,7 +24,6 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use fancy_regex::Regex;
 use ratatui::{
     DefaultTerminal, Frame,
-    symbols::border,
     widgets::{Block, BorderType, Paragraph},
 };
 
@@ -88,11 +88,11 @@ impl Editor {
     pub fn handle_events(&mut self) -> std::io::Result<()> {
         match event::read()? {
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)
+                self.handle_key_event(key_event);
             }
             Event::Resize(x, y) => self.handle_resize(x, y),
             _ => {}
-        };
+        }
         Ok(())
     }
     pub fn handle_resize(&mut self, x: u16, y: u16) {
@@ -111,7 +111,7 @@ impl Editor {
             self.file_path = "[scratch]".into();
             return;
         };
-        self.file_path = path.clone();
+        self.file_path.clone_from(&path);
         match read_to_string(path) {
             Ok(content) => {
                 self.file_text = content;
@@ -133,75 +133,82 @@ impl Editor {
 
     pub fn handle_key_event(&mut self, key_event: event::KeyEvent) {
         match self.mode {
-            EditorMode::Normal => match key_event.code {
-                KeyCode::Char(c) => match c {
-                    'q' => self.exit(),
-                    'i' => self.mode = EditorMode::Insert,
-                    'v' => self.mode = EditorMode::Visual,
-                    ':' => self.mode = EditorMode::Command,
-                    'k' => self.move_cursor(CursorDirection::Up),
-                    'j' => self.move_cursor(CursorDirection::Down),
-                    'h' => self.move_cursor(CursorDirection::Left),
-                    'l' => self.move_cursor(CursorDirection::Right),
-                    'd' => self.remove_char(&self.cursor.clone()),
-                    'o' => {
-                        self.insert_char(
-                            &Position {
-                                x: self.line_at_cursor().len() as u16 + 1,
-                                y: self.cursor.y,
-                            },
-                            '\n',
-                        );
-                        self.move_cursor(CursorDirection::Down);
-                        self.mode = EditorMode::Insert;
-                    }
-                    'O' => {
-                        self.insert_char(
-                            &Position {
-                                x: self.line_from_cursor(-1).len() as u16 + 1,
-                                y: self.cursor.y - 1,
-                            },
-                            '\n',
-                        );
-                        self.mode = EditorMode::Insert;
-                    }
-                    'A' => {
-                        self.cursor.x = self.line_at_cursor().len() as u16;
-                        self.mode = EditorMode::Insert
-                    }
-                    '0' => self.cursor.x = 0,
-                    'e' => self.move_to_end_of_pat(
-                        &Regex::new(r#"(\p{Z}+|\p{P}+|\p{N}+|\p{L}+|\p{S}+)"#).unwrap(),
-                    ),
-                    'b' => self.move_to_start_of_pat(
-                        &Regex::new(r#"(\p{Z}+|\p{P}+|\p{N}+|\p{L}+|\p{S}+)"#).unwrap(),
-                    ),
-                    'g' => match self.keyhistory.last() {
-                        Some(KeyCode::Char('g')) => self.cursor = Position::default(),
+            EditorMode::Normal => {
+                if let KeyCode::Char(c) = key_event.code {
+                    match c {
+                        'q' => self.exit(),
+                        'i' => self.mode = EditorMode::Insert,
+                        'v' => self.mode = EditorMode::Visual,
+                        ':' => self.mode = EditorMode::Command,
+                        'k' => self.move_cursor(CursorDirection::Up),
+                        'j' => self.move_cursor(CursorDirection::Down),
+                        'h' => self.move_cursor(CursorDirection::Left),
+                        'l' => self.move_cursor(CursorDirection::Right),
+                        'd' => self.remove_char(self.cursor),
+                        'o' => {
+                            self.insert_char(
+                                Position {
+                                    x: u16::try_from(self.line_at_cursor().len())
+                                        .unwrap_or_default()
+                                        + 1,
+                                    y: self.cursor.y,
+                                },
+                                '\n',
+                            );
+                            self.move_cursor(CursorDirection::Down);
+                            self.mode = EditorMode::Insert;
+                        }
+                        'O' => {
+                            self.insert_char(
+                                Position {
+                                    x: u16::try_from(self.line_from_cursor(-1).len())
+                                        .unwrap_or_default()
+                                        + 1,
+                                    y: self.cursor.y - 1,
+                                },
+                                '\n',
+                            );
+                            self.mode = EditorMode::Insert;
+                        }
+                        'A' => {
+                            self.cursor.x =
+                                u16::try_from(self.line_at_cursor().len()).unwrap_or_default();
+                            self.mode = EditorMode::Insert;
+                        }
+                        '0' => self.cursor.x = 0,
+                        'e' => self.move_to_end_of_pat(
+                            &Regex::new(r"(\p{Z}+|\p{P}+|\p{N}+|\p{L}+|\p{S}+)").unwrap(),
+                        ),
+                        'b' => self.move_to_start_of_pat(
+                            &Regex::new(r"(\p{Z}+|\p{P}+|\p{N}+|\p{L}+|\p{S}+)").unwrap(),
+                        ),
+                        'g' => {
+                            if let Some(KeyCode::Char('g')) = self.keyhistory.last() {
+                                self.cursor = Position::default();
+                            }
+                        }
                         _ => {}
-                    },
-                    _ => {}
-                },
-                _ => {}
-            },
+                    }
+                }
+            }
             EditorMode::Visual => match key_event.code {
                 KeyCode::Char('v') | KeyCode::Esc => self.mode = EditorMode::Normal,
                 _ => {}
             },
             EditorMode::Insert => match key_event.code {
                 KeyCode::Char(c) => {
-                    self.insert_char(&self.cursor.clone(), c);
+                    self.insert_char(self.cursor, c);
                     self.move_cursor(CursorDirection::Right);
                 }
                 KeyCode::Enter => {
-                    self.insert_char(&self.cursor.clone(), '\n');
+                    self.insert_char(self.cursor, '\n');
                     self.cursor = Position {
                         x: 0,
                         y: self.cursor.y + 1,
                     }
                 }
                 KeyCode::Backspace => {
-                    self.remove_char(&Position {
+                    self.remove_char(Position {
                         x: self.cursor.x - 1,
                         y: self.cursor.y,
                     });
@@ -238,10 +245,10 @@ impl Editor {
     }
     pub fn end_command(&mut self) {
         self.mode = EditorMode::Normal;
-        self.command = "".to_string();
+        self.command = String::new();
     }
     pub fn set_theme(&mut self, path: Option<impl ToString>) {
-        let path = path.map(|v| v.to_string()).unwrap_or("default".to_string());
+        let path = path.map_or("default".to_string(), |v| v.to_string());
         let full_path = ["theme", &path].join("/");
         let full_path = [full_path, "toml".into()].join(".");
         self.theme_path = full_path;
@@ -260,12 +267,12 @@ pub enum LogMessage {
 
 impl Default for LogMessage {
     fn default() -> Self {
-        LogMessage::Info("".into())
+        LogMessage::Info(String::new())
     }
 }
 
 impl LogMessage {
-    pub fn to_paragraph<'a>(&'a self) -> Paragraph<'a> {
+    pub fn to_paragraph(&self) -> Paragraph<'_> {
         match self {
             LogMessage::Error(msg) => {
                 Paragraph::new(msg.as_str()).style(Style::new().fg(Color::Red))
@@ -289,7 +296,7 @@ impl StatefulWidget for &Editor {
         self,
         area: ratatui::prelude::Rect,
         buf: &mut ratatui::prelude::Buffer,
-        state: &mut State,
+        _state: &mut editor::State,
     ) where
         Self: Sized,
     {
@@ -297,7 +304,7 @@ impl StatefulWidget for &Editor {
             .unwrap_or(include_str!("../../theme/default.toml").to_string());
         let theme: ColourTheme = toml::from_str(&theme).unwrap();
 
-        let syntax_lang = self.file_path.split(".").last().unwrap_or_default();
+        let syntax_lang = self.file_path.split('.').next_back().unwrap_or_default();
         let syntax_path = format!("./syntax/{syntax_lang}.toml");
         let syntax = read_to_string(syntax_path);
         let syntax: SyntaxRegex = syntax
@@ -313,15 +320,11 @@ impl StatefulWidget for &Editor {
             .style(Style::new().bg(theme.background.into()))
             .border_set(border::THICK);
         let text = self.file_text.as_str();
-        let text = colour_text(&text, &theme, &syntax);
+        let text = colour_text(text, &theme, &syntax);
 
         let adjusted_area = area;
 
-        let scroll_height = if self.cursor.y + 1 >= adjusted_area.height {
-            self.cursor.y + 1 - adjusted_area.height
-        } else {
-            0
-        };
+        let scroll_height = (self.cursor.y + 1).saturating_sub(adjusted_area.height);
 
         self.message_queue.to_paragraph().render(
             Rect {
@@ -346,8 +349,8 @@ impl StatefulWidget for &Editor {
                 .title_top("Command")
                 .style(Style::new().fg(Color::White).bg(theme.background.into()));
 
-            let percent_80: u16 = (adjusted_area.width as f32 * 0.8).round() as u16;
-            let percent_10: u16 = (adjusted_area.width as f32 * 0.1).round() as u16;
+            let percent_80: u16 = (f32::from(adjusted_area.width) * 0.8).round() as u16;
+            let percent_10: u16 = (f32::from(adjusted_area.width) * 0.1).round() as u16;
             Paragraph::new(self.command.as_str())
                 .style(Style::new().fg(Color::White).bg(theme.background.into()))
                 .block(command_block)
@@ -360,7 +363,7 @@ impl StatefulWidget for &Editor {
                         3,
                     ),
                     buf,
-                )
+                );
         }
     }
 }
